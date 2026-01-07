@@ -1,0 +1,12 @@
+line_no;raw_value;reason
+3;Michal;not a positive integer
+5;-15;not a positive integer
+6;vvv;not a positive integer
+8;vf;not a positive integer
+10;145;out of range 1-100
+11;;empty row
+13;;empty row
+15;;empty row
+16;-0,2;not a positive integer
+17;;empty row
+18;0,3;not a positive integer
