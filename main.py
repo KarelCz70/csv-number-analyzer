@@ -1,19 +1,60 @@
-# The script categorizes values based on a threshold,
-# saves a human-readable TXT report and CSV outputs into /outputs.
+# The script categorizes values based on a threshold and generates reports.
+# It reads numbers from a CSV file, logs invalid rows, and outputs:
+# - outputs/report.txt (human readable)
+# - outputs/report_long.csv (Excel/pandas friendly)
+# - outputs/invalid_rows.csv (invalid input log)
 
 import csv
 import os
+import argparse
 
 
-def read_numbers_with_invalids(filename="data.csv", delimiter=";"):
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Analyze numbers from a CSV file and generate TXT/CSV reports."
+    )
+
+    parser.add_argument(
+        "--input",
+        default="data.csv",
+        help="Input CSV file (default: data.csv)",
+    )
+
+    parser.add_argument(
+        "--threshold",
+        type=int,
+        default=25,
+        help="Threshold for categorization (default: 25)",
+    )
+
+    parser.add_argument(
+        "--delimiter",
+        default=";",
+        help="CSV delimiter (default: ;)",
+    )
+
+    parser.add_argument(
+        "--outdir",
+        default="outputs",
+        help="Output directory (default: outputs)",
+    )
+
+    return parser.parse_args()
+
+
+def ensure_outdir(path):
+    os.makedirs(path, exist_ok=True)
+
+
+def read_numbers_with_invalids(filename, delimiter=";"):
     numbers = []
     invalid_rows = []
 
     with open(filename, "r", encoding="utf-8") as file:
         reader = csv.reader(file, delimiter=delimiter)
-        next(reader, None)  # přeskočí hlavičku
+        next(reader, None)  # skip header safely
 
-        for line_no, row in enumerate(reader, start=2):  # start=2 kvůli hlavičce
+        for line_no, row in enumerate(reader, start=2):  # start=2 because header is line 1
             if not row:
                 invalid_rows.append((line_no, "", "empty row"))
                 continue
@@ -55,11 +96,7 @@ def average(numbers):
     return sum(numbers) / len(numbers) if numbers else 0
 
 
-def ensure_outputs_dir(path="outputs"):
-    os.makedirs(path, exist_ok=True)
-
-
-def save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold=25, filename="outputs/report.txt"):
+def save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold, filename):
     with open(filename, "w", encoding="utf-8") as file:
         file.write("NUMBERS REPORT\n")
         file.write("----------------\n")
@@ -91,8 +128,8 @@ def save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold=
                 file.write(f"Line {line_no}: '{raw}' -> {reason}\n")
 
 
-def save_report_long_csv(numbers, threshold=25, filename="outputs/report_long.csv", delimiter=";"):
-    # Excel/pandas friendly: value, category, threshold (jeden záznam = jeden řádek)
+def save_report_long_csv(numbers, threshold, filename, delimiter=";"):
+    # Excel/pandas friendly: one value per row + category
     with open(filename, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file, delimiter=delimiter)
         writer.writerow(["value", "category", "threshold"])
@@ -102,7 +139,7 @@ def save_report_long_csv(numbers, threshold=25, filename="outputs/report_long.cs
             writer.writerow([n, category, threshold])
 
 
-def save_invalids_csv(invalid_rows, filename="outputs/invalid_rows.csv", delimiter=";"):
+def save_invalids_csv(invalid_rows, filename, delimiter=";"):
     with open(filename, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file, delimiter=delimiter)
         writer.writerow(["line_no", "raw_value", "reason"])
@@ -112,19 +149,21 @@ def save_invalids_csv(invalid_rows, filename="outputs/invalid_rows.csv", delimit
 
 
 def main():
-    threshold = 25
-    input_file = "data.csv"
-    delimiter = ";"  # pro CZ Excel
+    args = parse_arguments()
 
-    ensure_outputs_dir("outputs")
+    input_file = args.input
+    threshold = args.threshold
+    delimiter = args.delimiter
+    outdir = args.outdir
+
+    ensure_outdir(outdir)
 
     numbers, invalid_rows = read_numbers_with_invalids(input_file, delimiter=delimiter)
+    low_numbers, high_numbers = categorize(numbers, threshold=threshold) if numbers else ([], [])
 
     if not numbers:
         print("Soubor neobsahuje žádná platná čísla (1–100).")
     else:
-        low_numbers, high_numbers = categorize(numbers, threshold=threshold)
-
         print("Načtená a validní čísla:", numbers)
         print("Počet čísel:", len(numbers))
         print("Součet:", sum(numbers))
@@ -136,27 +175,20 @@ def main():
         print(f"Načtená čísla > {threshold}:", high_numbers)
         print(f"Počet čísel > {threshold}:", len(high_numbers))
 
-    # když numbers je prázdné, potřebujeme mít low/high prázdné, aby TXT report fungoval
-    if numbers:
-        low_numbers, high_numbers = categorize(numbers, threshold=threshold)
-    else:
-        low_numbers, high_numbers = [], []
+    report_txt = os.path.join(outdir, "report.txt")
+    report_long_csv = os.path.join(outdir, "report_long.csv")
+    invalid_csv = os.path.join(outdir, "invalid_rows.csv")
 
-    save_report_txt(
-        numbers,
-        low_numbers,
-        high_numbers,
-        invalid_rows,
-        threshold=threshold,
-        filename="outputs/report.txt",
-    )
-    save_report_long_csv(numbers, threshold=threshold, filename="outputs/report_long.csv", delimiter=delimiter)
-    save_invalids_csv(invalid_rows, filename="outputs/invalid_rows.csv", delimiter=delimiter)
+    save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold, report_txt)
+    save_report_long_csv(numbers, threshold, report_long_csv, delimiter=delimiter)
+    save_invalids_csv(invalid_rows, invalid_csv, delimiter=delimiter)
 
-    print("\nUloženo do složky outputs:")
-    print("- outputs/report.txt")
-    print("- outputs/report_long.csv")
-    print("- outputs/invalid_rows.csv")
+    print("\nUloženo:")
+    print(f"- {report_txt}")
+    print(f"- {report_long_csv}")
+    print(f"- {invalid_csv}")
 
 
-main()
+if __name__ == "__main__":
+    main()
+
