@@ -54,6 +54,15 @@ def read_numbers_with_invalids(filename, delimiter=";"):
 
         for line_no, row in enumerate(reader, start=2):
             raw = (row.get("value") or "").strip()
+        reader = csv.reader(file, delimiter=delimiter)
+        next(reader, None)  # skip header safely
+
+        for line_no, row in enumerate(reader, start=2):  # start=2 because header is line 1
+            if not row:
+                invalid_rows.append((line_no, "", "empty row"))
+                continue
+
+            raw = row[0].strip()
 
             if raw == "":
                 invalid_rows.append((line_no, raw, "empty value"))
