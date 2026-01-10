@@ -5,6 +5,11 @@ filters invalid rows, categorizes valid numbers based on a configurable threshol
 and generates multiple reports in TXT and CSV formats.
 
 ---
+## What this project demonstrates
+
+This project demonstrates practical CSV data cleaning, validation, and reporting in Python.
+It is designed as a small, reusable command-line automation tool.
+--------------------------------------------------------------------------
 
 ## Features
 
