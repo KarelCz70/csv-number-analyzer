@@ -1,8 +1,6 @@
-# The script categorizes values based on a threshold and generates reports.
-# It reads numbers from a CSV file, logs invalid rows, and outputs:
-# - outputs/report.txt (human readable)
-# - outputs/report_long.csv (Excel/pandas friendly)
-# - outputs/invalid_rows.csv (invalid input log)
+# CSV Number Analyzer
+# Reads numbers from a CSV file, validates and categorizes them,
+# logs invalid rows, and generates reports into an output folder.
 
 import csv
 import os
@@ -21,6 +19,18 @@ def parse_arguments():
     )
 
     parser.add_argument(
+        "--delimiter",
+        default=";",
+        help="CSV delimiter (default: ;)",
+    )
+
+    parser.add_argument(
+        "--column",
+        default="value",
+        help="Name of the column containing numeric values (default: value)",
+    )
+
+    parser.add_argument(
         "--threshold",
         type=int,
         default=25,
@@ -28,9 +38,19 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--delimiter",
-        default=";",
-        help="CSV delimiter (default: ;)",
+        "--min",
+        dest="min_value",
+        type=int,
+        default=1,
+        help="Minimum allowed value (default: 1)",
+    )
+
+    parser.add_argument(
+        "--max",
+        dest="max_value",
+        type=int,
+        default=100,
+        help="Maximum allowed value (default: 100)",
     )
 
     parser.add_argument(
@@ -44,43 +64,6 @@ def parse_arguments():
 
 def ensure_outdir(path):
     os.makedirs(path, exist_ok=True)
-
-def read_numbers_with_invalids(filename, delimiter=";"):
-    numbers = []
-    invalid_rows = []
-
-    with open(filename, "r", encoding="utf-8") as file:
-        reader = csv.DictReader(file, delimiter=delimiter)
-
-        for line_no, row in enumerate(reader, start=2):
-            raw = (row.get("value") or "").strip()
-        reader = csv.reader(file, delimiter=delimiter)
-        next(reader, None)  # skip header safely
-
-        for line_no, row in enumerate(reader, start=2):  # start=2 because header is line 1
-            if not row:
-                invalid_rows.append((line_no, "", "empty row"))
-                continue
-
-            raw = row[0].strip()
-
-            if raw == "":
-                invalid_rows.append((line_no, raw, "empty value"))
-                continue
-
-            if not raw.isdigit():
-                invalid_rows.append((line_no, raw, "not a positive integer"))
-                continue
-
-            number = int(raw)
-            if not (1 <= number <= 100):
-                invalid_rows.append((line_no, raw, "out of range 1-100"))
-                continue
-
-            numbers.append(number)
-
-    return numbers, invalid_rows
-
 
 
 def categorize(numbers, threshold=25):
@@ -100,10 +83,67 @@ def average(numbers):
     return sum(numbers) / len(numbers) if numbers else 0
 
 
-def save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold, filename):
+def read_numbers_with_invalids(
+    filename,
+    delimiter=";",
+    column="value",
+    min_value=1,
+    max_value=100,
+):
+    numbers = []
+    invalid_rows = []
+
+    with open(filename, "r", encoding="utf-8") as file:
+        reader = csv.DictReader(file, delimiter=delimiter)
+
+        # Kontrola, že existuje hlavička a požadovaný sloupec
+        fieldnames = reader.fieldnames or []
+        if not fieldnames:
+            invalid_rows.append((1, "", "missing header row"))
+            return numbers, invalid_rows
+
+        if column not in fieldnames:
+            invalid_rows.append((1, "", f"missing column '{column}'"))
+            return numbers, invalid_rows
+
+        # start=2 protože hlavička je řádek 1
+        for line_no, row in enumerate(reader, start=2):
+            raw = (row.get(column) or "").strip()
+
+            if raw == "":
+                invalid_rows.append((line_no, raw, "empty value"))
+                continue
+
+            if not raw.isdigit():
+                invalid_rows.append((line_no, raw, "not a positive integer"))
+                continue
+
+            number = int(raw)
+            if not (min_value <= number <= max_value):
+                invalid_rows.append((line_no, raw, f"out of range {min_value}-{max_value}"))
+                continue
+
+            numbers.append(number)
+
+    return numbers, invalid_rows
+
+
+def save_report_txt(
+    numbers,
+    low_numbers,
+    high_numbers,
+    invalid_rows,
+    threshold,
+    min_value,
+    max_value,
+    column,
+    filename,
+):
     with open(filename, "w", encoding="utf-8") as file:
         file.write("NUMBERS REPORT\n")
         file.write("----------------\n")
+        file.write(f"Column: {column}\n")
+        file.write(f"Valid range: {min_value}-{max_value}\n")
         file.write(f"Threshold: {threshold}\n\n")
 
         if not numbers:
@@ -133,7 +173,7 @@ def save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold,
 
 
 def save_report_long_csv(numbers, threshold, filename, delimiter=";"):
-    # Excel/pandas friendly: one value per row + category
+    # Excel/pandas friendly: value, category, threshold (one value per row)
     with open(filename, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file, delimiter=delimiter)
         writer.writerow(["value", "category", "threshold"])
@@ -156,38 +196,62 @@ def main():
     args = parse_arguments()
 
     input_file = args.input
-    threshold = args.threshold
     delimiter = args.delimiter
     outdir = args.outdir
+    threshold = args.threshold
+    column = args.column
+    min_value = args.min_value
+    max_value = args.max_value
 
     ensure_outdir(outdir)
 
-    numbers, invalid_rows = read_numbers_with_invalids(input_file, delimiter=delimiter)
+    numbers, invalid_rows = read_numbers_with_invalids(
+        input_file,
+        delimiter=delimiter,
+        column=column,
+        min_value=min_value,
+        max_value=max_value,
+    )
+
     low_numbers, high_numbers = categorize(numbers, threshold=threshold) if numbers else ([], [])
 
+    # Terminal summary
     if not numbers:
-        print("Soubor neobsahuje žádná platná čísla (1–100).")
+        print("No valid numbers found.")
+        if invalid_rows:
+            # vypiš první důvod, ať uživatel hned ví co je špatně
+            print(f"First issue: Line {invalid_rows[0][0]} -> {invalid_rows[0][2]}")
     else:
-        print("Načtená a validní čísla:", numbers)
-        print("Počet čísel:", len(numbers))
-        print("Součet:", sum(numbers))
-        print("Průměr:", round(average(numbers), 2))
+        print("Valid numbers:", numbers)
+        print("Count:", len(numbers))
+        print("Total:", sum(numbers))
+        print("Average:", round(average(numbers), 2))
         print("Minimum:", min(numbers))
         print("Maximum:", max(numbers))
-        print(f"Načtená čísla ≤ {threshold}:", low_numbers)
-        print(f"Počet čísel ≤ {threshold}:", len(low_numbers))
-        print(f"Načtená čísla > {threshold}:", high_numbers)
-        print(f"Počet čísel > {threshold}:", len(high_numbers))
+        print(f"Low (<= {threshold}):", low_numbers)
+        print(f"Low count:", len(low_numbers))
+        print(f"High (> {threshold}):", high_numbers)
+        print(f"High count:", len(high_numbers))
 
     report_txt = os.path.join(outdir, "report.txt")
     report_long_csv = os.path.join(outdir, "report_long.csv")
     invalid_csv = os.path.join(outdir, "invalid_rows.csv")
 
-    save_report_txt(numbers, low_numbers, high_numbers, invalid_rows, threshold, report_txt)
-    save_report_long_csv(numbers, threshold, report_long_csv, delimiter=delimiter)
-    save_invalids_csv(invalid_rows, invalid_csv, delimiter=delimiter)
+    save_report_txt(
+        numbers,
+        low_numbers,
+        high_numbers,
+        invalid_rows,
+        threshold=threshold,
+        min_value=min_value,
+        max_value=max_value,
+        column=column,
+        filename=report_txt,
+    )
+    save_report_long_csv(numbers, threshold=threshold, filename=report_long_csv, delimiter=delimiter)
+    save_invalids_csv(invalid_rows, filename=invalid_csv, delimiter=delimiter)
 
-    print("\nUloženo:")
+    print("\nSaved:")
     print(f"- {report_txt}")
     print(f"- {report_long_csv}")
     print(f"- {invalid_csv}")
