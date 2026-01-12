@@ -58,6 +58,19 @@ def parse_arguments():
         default="outputs",
         help="Output directory (default: outputs)",
     )
+    
+    parser.add_argument(
+    "--no-txt",
+    action="store_true",
+    help="Do not generate TXT report",
+)
+
+    parser.add_argument(
+    "--no-csv",
+    action="store_true",
+    help="Do not generate CSV reports",
+)
+
 
     return parser.parse_args()
 
@@ -237,19 +250,29 @@ def main():
     report_long_csv = os.path.join(outdir, "report_long.csv")
     invalid_csv = os.path.join(outdir, "invalid_rows.csv")
 
-    save_report_txt(
-        numbers,
-        low_numbers,
-        high_numbers,
-        invalid_rows,
-        threshold=threshold,
-        min_value=min_value,
-        max_value=max_value,
-        column=column,
-        filename=report_txt,
-    )
-    save_report_long_csv(numbers, threshold=threshold, filename=report_long_csv, delimiter=delimiter)
-    save_invalids_csv(invalid_rows, filename=invalid_csv, delimiter=delimiter)
+    if not args.no_txt:
+        save_report_txt(
+            numbers,
+            low_numbers,
+            high_numbers,
+            invalid_rows,
+            threshold=threshold,
+            min_value=min_value,
+            max_value=max_value,
+            column=column,
+            filename=report_txt,
+        )
+
+    if not args.no_csv:
+        save_report_long_csv(numbers, threshold=threshold, filename=report_long_csv, delimiter=delimiter)
+        save_invalids_csv(invalid_rows, filename=invalid_csv, delimiter=delimiter)
+
+    print("\nSaved:")
+    if not args.no_txt:
+        print(f"- {report_txt}")
+    if not args.no_csv:
+        print(f"- {report_long_csv}")
+        print(f"- {invalid_csv}")
 
     print("\nSaved:")
     print(f"- {report_txt}")
